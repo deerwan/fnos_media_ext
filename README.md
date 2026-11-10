@@ -4,147 +4,57 @@
 
 > 配置之后才出现在线能力；停用或卸载，官方影视立即原样恢复。
 
-
 ## 关键约束
 
-- **不内置任何源**：不附带资源站 URL、订阅 URL、示例真实地址或随包站点清单。包内只含协议与格式解析代码。
-- **零源是合法默认状态**：干净安装后 `/_ext/healthz` 返回 OK，所有请求纯透传，官方影视功能完全不受影响；空闲 CPU ≈ 0。打开管理页时按需检查一次更新（命中 6 小时缓存则不出网）；「日志诊断」页打开期间前端每 2 秒刷新一次日志，离开页面即停止，服务端没有任何常驻轮询。订阅自动更新默认关闭，开启后才有一个每 60 秒做内存检查的轻量协程。
-- **单一磁盘状态**：仅 `state/config.json`（首次启动时生成，含随机管理令牌；之后只有用户显式保存配置才写盘）。标题、搜索结果、播放清单全部内存态，重启即丢。
-- **固定预算**：搜索固定并发与 2.5s 总预算，源数量增加不会延长等待；起播默认 3s 并发优选最快线路（`auto_best_source` 可关），失败自动换线。
-- **不做**：虚拟媒体库、常驻预热、占位轮询、后台自愈、全站测速、健康画像、去广告指纹、网盘线、插件自更新、账号 ACL。
+- **不内置任何源**：不附带资源站 / 订阅地址，包内只含协议与格式解析代码。
+- **零源是合法默认状态**：干净安装后纯透传、空闲 CPU ≈ 0；除检查更新与日志页自动刷新外不产生额外外连，服务端没有任何常驻轮询。
+- **单一磁盘状态**：仅 `state/config.json`（首次启动生成，用户显式保存配置才写盘），其余全内存态。
+- **固定预算**：搜索 2.5s 总预算；起播 3s 并发优选最快线路，失败自动换线。
+- **不做**：虚拟媒体库、常驻预热、后台自愈、全站测速、插件自更新、账号 ACL。
 
 ## 安装
 
-1. 在 fnOS 应用中心 **手动安装 FPK**，选择 `dist/fnos_media_ext-<version>.fpk`，并勾选同意免责声明。
-2. 依赖应用「影视 (`trim.media`)」必须处于运行状态；需要 fnOS 1.2.0 及以上。
-3. 安装完成后，桌面出现「飞牛影视扩展」图标。此时为纯透传状态，官方影视一切照旧。
-4. 打开管理页，在左侧「订阅配置」中粘贴你自己持有的订阅地址，点「拉取配置」。
-5. **全量拉取**：订阅里所有可识别的源一次性导入并启用，无需逐个勾选；也可编辑「配置内容」后点「保存并应用」。
-6. 需要定期同步时，打开「自动更新」并设置间隔（默认 24 小时），点「保存订阅设置」。
+1. 在 fnOS 应用中心**手动安装 FPK**（`dist/fnos_media_ext-<version>.fpk`），需 fnOS 1.2.0+ 且应用「影视」正在运行。
+2. 桌面出现「飞牛影视扩展」图标，此时为纯透传状态，官方影视一切照旧。
+3. 打开管理页 →「订阅配置」粘贴你自己的订阅地址 →「拉取配置」全量导入并启用。
+4. 需要定期同步时开启「自动更新」并设置间隔（默认 24 小时）。
 
 管理页入口：桌面 iframe `/app/fnos-media-ext/`，或浏览器直连 `/v/online-admin`。
 
 ## 支持的订阅格式
 
-| 格式 | 来源 | 说明 |
+| 格式 | 来源 |
+|---|---|
+| Base58 包装的 `api_site` JSON | Base58 订阅文本（含代理 `format=2`） |
+| 明文 `api_site` JSON | 影视聚合工具配置文件 |
+| `sources` 数组 JSON | `sources` 列表订阅 |
+| TVBox `sites` | 通用 TVBox 配置（仅取苹果 CMS 采集站） |
+
+订阅不可达时可在「配置内容」粘贴订阅文本离线导入；完整备份用「关于」页的导出 / 导入。
+
+## 功能速览
+
+| 功能 | 说明 | 详细文档 |
 |---|---|---|
-| Base58 包装的 `api_site` JSON | Base58 订阅文本（含代理 `format=2`） | 整份 JSON 的 Bitcoin Base58 编码 |
-| 明文 `api_site` JSON | 影视聚合工具的配置文件 | 顶层 `cache_time` + `api_site` |
-| `sources` 数组 JSON | `sources` 列表订阅 | 每项 `name` / `url` |
-| TVBox `sites` | 通用 TVBox 配置 | 仅取苹果 CMS 采集站 |
+| 元数据清洗 + 官方刮削借用 | 简介分类清洗、背景图 / 评分 / IMDb，只读官方库 | [docs/metadata.md](docs/metadata.md) |
+| 播放状态 | 收藏 / 已看 / 续播，不写官方数据库 | [docs/playback.md](docs/playback.md) |
+| 起播竞速与换线 | 3s 并发优选最快线路，失败自动切换 | [docs/playback.md](docs/playback.md) |
+| 手机 App 播放兜底 | 修复手机端「文件权限不足」403 | [docs/playback.md](docs/playback.md) |
+| 检查更新红点 | 手动 + 打开页面自动检查，只读不安装 | [docs/update-check.md](docs/update-check.md) |
 
-解析时会剥离订阅中常见的 `?url=` 代理包裹、按规范化接口地址生成稳定 id；带特殊标记的源会登记但**默认禁用**，是否启用完全由用户决定。非 CMS 接口仍然过滤。拉取订阅使用独立连接池、5 秒超时、512 KB 上限与内网地址防护。若订阅地址不可达，可在「配置内容」中粘贴订阅文本后点「保存并应用」，完全不走网络。完整配置备份请使用「关于」页的文件导出 / 导入。
-
-
-## 元数据（P0 低风险）
-
-只做纯文本映射与清洗，**不新增任何网络请求、不引入 subprocess、不改动播放元数据常量**：
-
-- CMS 返回的简介与分类会清洗 HTML 标签 / 实体并保留段落换行；`vod_time` 更新时间落地到详情。
-- 详情页 `genres` 由 `type_name` 拆分，简介不再截断，主演 / 导演 / 更新时间分行展示。
-- 搜索卡片简介清洗后放宽到 1000 字（保留上限，避免 TV 端超长文本）。
-- `files[].file_name` 后缀按首选线路首集 URL 推导 `m3u8` / `mp4`，不再恒为 `.m3u8`。
-- **保持不动**：`duration` / `runtime` / `resolution_type` / `width` / `height` / `bps` / `codec_name` 等仍是兼容常量。真实播放元数据探测属于后续阶段（清单文本解析 + 播放后懒回填），需先评估对官方续播判定的影响。
-
-## 官方元数据借用（阶段 2）
-
-在线条目自动与本地媒体库的刮削结果关联（`proxy/borrow.py`，以 `mode=ro` 只读打开官方 `trimmedia.db`，不写不锁）：
-
-- 匹配规则：规范化标题（忽略标点 / 全半角 / 繁简差异的模糊比对）+ 年份 ±1；未命中静默回退 CMS 数据
-- 命中后详情页获得：横版高清背景图（`backdrops` + 真实宽高）、官方 logo、简介、评分、时长、IMDb ID（详情页自动出现 IMDb 链接）、官方分类 ID（客户端渲染成中文分类）
-- 演职人员接口 `person/list` 优先返回官方刮削数据（带头像与饰演角色）；未命中回退 CMS 演职人员拆分
-- 官方图片为相对路径，客户端统一拼 `/v/api/v1/sys/img` 前缀访问，无需拷贝文件
-- 开关：`borrow_official`（默认开启；仅读本地库，无任何网络请求）
-- `deploy/db_probe.py` 可只读输出官方库结构与分类映射，用于诊断与字段核对
-- 保持不动：`duration` / `resolution_type` 等播放元数据仍为兼容常量（真实探测属后续阶段）
-
-
-## 播放状态（收藏 / 已看 / 续播）
-
-在线条目是虚拟 item，官方数据库中没有对应记录，因此官方的收藏、已看与播放历史接口对它们都会返回业务错误。扩展自行拦截并维护这些状态（不写官方数据库）：
-
-- 拦截 `PUT/DELETE /v/api/v1/item/favorite`、`POST/DELETE /v/api/v1/item/watched`、`POST /v/api/v1/favorite/list`、`POST/DELETE /v/api/v1/play/record`、`GET /v/api/v1/play/list`、`POST /v/api/v1/play/info`，并在详情与搜索卡片回填 `is_favorite / is_watched / watched_ts / ts / duration`。
-- 收藏、已看、收藏夹、首页「继续观看」均可用；`play/info` 回填 `ts` 从上次位置续播；看完 95% 自动移出继续观看并标记已看。
-- 更多菜单里「手动匹配影片 / 刷新元数据 / 编辑元数据 / 删除」对虚拟条目语义上不适用，相关写请求吸收为 no-op，不再向官方报错。
-- 状态统一存于 `state/config.json` 的 `playstate` 键：收藏上限 500、历史上限 100，进度 10 秒节流写盘，服务停止时强制落盘。
-- 已知限制：标题库为纯内存态，服务重启后收藏/历史卡片需要重新搜索同名条目才会重新可播；状态本身不会丢失。多账号共用一份状态（未做用户隔离）。
-
-## 检查更新（只读）
-
-打开管理页时自动检查一次（也可在「关于」页手动刷新），后端访问 GitHub `releases/latest`，只展示最新正式版版本号、更新说明与 Release 页面链接：
-
-- 只认 `vX.Y.Z` 正式版，跳过草稿与预发布；5 秒超时、成功缓存 6 小时 / 失败缓存 10 分钟（纯内存），失败静默不打扰
-- 发现新版本时「关于」导航项显示常亮红点、关于页版本号旁显示 NEW 标记；红点不因查看页面而清除，直到检查结果不再有新版本
-- 不做后台轮询、不下载 FPK、不安装、不替换程序文件；升级请在 fnOS 应用中心手动安装（`cmd/upgrade_init` / `cmd/upgrade_callback` 会保留 `state/config.json`）
-- 仓库地址可在配置 `update_repo` 修改，仅接受 `owner/repo` 形式并拒绝路径穿越
-- 版本单一来源仍为 `VERSION`，`release.yml` 校验 tag 与版本一致并上传 `fpk + sha256`
-
-## 架构
-
-```
-proxy/
-  app.py           FastAPI 主应用：具名路由 + 兜底透传
-  supervise.py     UDS 原子换名接管、健康检查、退出回滚
-  upstream.py      官方后端 Unix Socket 透传（JSON / 流式）
-  config.py        唯一磁盘状态与热加载
-  subscription.py  订阅解析、归一化、SSRF 防护
-  cms.py           苹果 CMS 搜索与内存标题库
-  fake.py          官方响应伪造与 TV 端严格字段规整
-  hls.py           m3u8 改写、分片与海报代理
-  admin_api.py     管理 REST 接口 + 订阅全量拉取与定时刷新
-  webui_gateway.py 桌面 iframe 网关
-  static/          Web 配置页构建产物（单 JS + 单 CSS）
-web/               Vite + React + TypeScript 源码
-deploy/            systemd 单元与安装 / 卸载 / 依赖脚本
-packaging/fpk/     FPK 骨架与 build.sh
-```
-
-请求链：`nginx /v → /var/run/trim_media.sock → uvicorn`；具名路由命中在线条目时伪造响应，其余请求原样转发 `trim_media_upstream.sock`。管理页走独立桌面网关，不进入媒体链路。
-
-管理 API 写操作校验管理页下发的令牌（HttpOnly Cookie 或 `X-Admin-Token` 请求头），令牌不出现在 URL 与访问日志中。
-
-## 构建
+## 开发
 
 ```bash
-# 前端（产物需复制到 proxy/static）
-cd web && npm install && npm run build
-cp -a dist/. ../proxy/static/
-
-# FPK（需要 fnpack，macOS 版会放在 .tools/fnpack）
-bash packaging/fpk/build.sh --fnpack .tools/fnpack
-
-# 可选：不含离线 Python wheelhouse 的精简包（安装时需联网装依赖）
-bash packaging/fpk/build.sh --slim --fnpack .tools/fnpack
+.venv/bin/python -m unittest discover -s tests -v   # 测试
+bash packaging/fpk/build.sh --fnpack .tools/fnpack   # 打包 FPK
 ```
 
-`wheelhouse/` 提供离线 Python 依赖（fastapi / uvicorn / httpx），是 FPK 体积的主要来源；`--slim` 会去掉它，改由 `deploy/bootstrap_deps.sh` 在线安装。
+架构、构建细节与发版流程见 [docs/development.md](docs/development.md)；已知限制与免责声明见 [docs/limitations.md](docs/limitations.md)。
 
-应用图标由 `tools/generate_icon.py` 用纯标准库绘制（深墨青圆角方 + 薄荷绿几何 F + 接入圆环），不复用任何第三方或旧项目素材。运行 `python3 tools/generate_icon.py` 会同时生成 FPK 根目录图标、桌面 `app/ui/images/icon_*.png`，以及管理页左上角使用的 `web/public/app-icon.png`。
+## 文档索引
 
-## 测试
-
-```bash
-.venv/bin/python -m unittest discover -s tests -v
-```
-
-## 已知限制
-
-- 官方客户端字段契约依据 `trim.media 0.9.8` 逆向整理，未在全部机型与版本上实测；升级官方应用后可能需要重新适配。
-- 本项目不解析需爬虫 / jar / 安卓运行时的异构源，只支持苹果 CMS 采集接口；清单与图片代理仅允许公网目标（回环 / 链路本地地址被拦截），内网自建源的海报与分片代理不可用。
-- 起播清单失败会自动在候选线路间换线；播放中途失败仍需手动切换线路，不做后台自愈。
-- 性能数值是设计目标，未在 fnOS 真机压测。
-
-## 免责声明
-
-本项目是开源免费的技术研究 / 个人媒体库工具，仅在你自己的 NAS 上运行。它本身不提供、不存储、不分发任何影视、图片、字幕或播放地址，也不内置任何资源站、订阅地址或资源数据库。本项目不提供、不推荐、不解答任何资源站点的名称、地址或获取方法；接口由使用者自行配置并自行核实合法性。仅供学习交流与个人合法播放自有或已获授权内容使用，请勿商用或传播侵权内容，由此产生的法律责任由使用者自行承担。
-
-## 致谢
-
-本项目的设计参考了以下项目的思路，一并致谢（排名不分先后）：
-
-- `fnmedia-ext` —— 飞牛影视在线扩展
-- `fnos_music_ext` —— 飞牛音乐扩展
-- `MoonTV` / `LunaTV` / `LibreTV` 
-- `LunaTV-config` —— 聚合源订阅格式的参照
-
-同时感谢飞牛 fnOS 开发者社区提供的 FPK 打包规范与接口资料。
+- [docs/metadata.md](docs/metadata.md) —— 元数据清洗与官方刮削借用
+- [docs/playback.md](docs/playback.md) —— 播放链路、播放状态、手机 App 兜底
+- [docs/update-check.md](docs/update-check.md) —— 检查更新（只读）与红点提示
+- [docs/development.md](docs/development.md) —— 架构、构建、测试、发版
+- [docs/limitations.md](docs/limitations.md) —— 已知限制、免责声明、致谢
