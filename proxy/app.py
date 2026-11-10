@@ -429,6 +429,42 @@ async def person_list_route(guid: str, request: Request):
     return JSONResponse(fake.ok({"total": len(people), "list": people[:40]}))
 
 
+@app.get("/v/api/v1/media/range/{file_hash}")
+async def media_range_route(file_hash: str, request: Request):
+    """手机 App 原画直链兜底：订阅源条目没有官方文件，App 拿 fake GUID 请求
+    media/range 时官方必然 403。命中订阅源映射时改由我们供数：mp4 直链做
+    Range 代理（支持拖动），HLS 源重定向到本模块 m3u8 播放链路；官方真实
+    文件的 hash 永远透传，不受影响。"""
+    store = request.app.state.store
+    resolved = store.resolve_media(file_hash)
+    if not resolved:
+        ep = store.resolve_episode(file_hash)
+        resolved = (ep[0], ep[1]) if ep else None
+    if not resolved:
+        return await _passthrough(request)
+    guid, index = resolved
+    brief = store.get(guid)
+    if not brief:
+        return await _passthrough(request)
+    picked = _pick(brief, 0, index)
+    if not picked:
+        return Response(status_code=404)
+    url = picked[0]
+    is_hls = ".m3u8" in url.lower()
+    runtime.log(f"media/range takeover: {brief.get('title', '')[:30]} "
+                f"ep{index + 1} -> {'hls' if is_hls else 'direct'}")
+    if is_hls:
+        mg = fake.media_guid(guid)
+        return Response(status_code=302, headers={
+            "Location": f"{ONLINE}/{mg}/main.m3u8?line=0&index={index}"})
+    try:
+        url = hls.ensure_public_target(url)
+    except ValueError:
+        _mark_bad_line(guid, 0)
+        return Response(status_code=404)
+    return await hls.proxy_media(request, url, request.app.state.src)
+
+
 @app.post("/v/api/v1/play/play")
 async def play_play(request: Request):
     body = await _body(request)
