@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Bootstrap, type Config, type UpdateInfo } from './api';
 import type { Notify } from './App';
 
@@ -142,38 +142,76 @@ export function CachePage({ boot, refresh, notify }: Props) {
 }
 
 export function LogsPage({ notify }: { notify: Notify }) {
-  const [lines, setLines] = useState<{ ts: number; msg: string }[] | null>(null);
+  const [lines, setLines] = useState<{ ts: number; msg: string }[]>([]);
   const [busy, setBusy] = useState(false);
-  async function load() {
-    setBusy(true);
+  const [paused, setPaused] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const followRef = useRef(true);
+
+  const load = useCallback(async (reportError = false) => {
     try {
       const data = await api.logs();
       setLines(data.logs);
+      setLoaded(true);
     } catch (err) {
-      notify(err instanceof Error ? err.message : '读取失败', 'err');
-    } finally {
-      setBusy(false);
+      if (reportError) {
+        notify(err instanceof Error ? err.message : '读取失败', 'err');
+      }
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => {
+      if (!paused && document.visibilityState === 'visible') void load();
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [load, paused]);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (box && followRef.current) box.scrollTop = box.scrollHeight;
+  }, [lines]);
+
+  function onScroll() {
+    const box = boxRef.current;
+    if (box) {
+      followRef.current = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
     }
   }
+
+  async function manual() {
+    setBusy(true);
+    await load(true);
+    setBusy(false);
+  }
+
   return (
     <>
       <div className="page-head">
         <h1>日志与诊断</h1>
-        <p className="page-desc">按需读取，页面不会自动轮询，离开即停止</p>
+        <p className="page-desc">打开页面自动加载并实时刷新，离开页面即停止</p>
       </div>
       <section className="card">
         <div className="row mb">
-          <button className="btn primary" disabled={busy} onClick={() => void load()}>
-            {busy ? '读取中…' : '读取最近日志'}
+          <button className="btn primary sm" disabled={busy} onClick={() => void manual()}>
+            立即刷新
           </button>
-          <span className="small">进程内环形缓冲，最多 200 条，不落盘</span>
+          <button className="btn sm" onClick={() => setPaused(!paused)}>
+            {paused ? '继续自动刷新' : '暂停自动刷新'}
+          </button>
+          <span className="small">
+            {paused ? '已暂停' : '每 2 秒刷新（页面隐藏时暂停）'}；
+            进程内环形缓冲，最多 200 条，不落盘
+          </span>
         </div>
-        {lines === null ? (
-          <p className="hint">尚未读取。点击上方按钮获取当前运行日志。</p>
+        {!loaded ? (
+          <p className="hint">正在加载日志…</p>
         ) : lines.length === 0 ? (
           <p className="hint">暂无日志记录。</p>
         ) : (
-          <div className="log-box">
+          <div className="log-box" ref={boxRef} onScroll={onScroll}>
             {lines.map((line, i) => (
               <div key={`${line.ts}-${i}`}>
                 [{new Date(line.ts * 1000).toLocaleTimeString()}] {line.msg}
@@ -186,25 +224,11 @@ export function LogsPage({ notify }: { notify: Notify }) {
   );
 }
 
-export function AboutPage({ boot }: Props) {
-  const [update, setUpdate] = useState<UpdateInfo | null>(null);
-  const [checking, setChecking] = useState(false);
-
-  async function checkUpdate() {
-    setChecking(true);
-    try {
-      setUpdate(await api.checkUpdate(true));
-    } catch {
-      setUpdate({
-        current: boot.version, latest: '', has_update: false, html_url: '',
-        notes: '', assets: [], published_at: '', error: 'unavailable',
-        cached: false,
-      });
-    } finally {
-      setChecking(false);
-    }
-  }
-
+export function AboutPage({ boot, update, checking, onCheck }: Props & {
+  update: UpdateInfo | null;
+  checking: boolean;
+  onCheck: () => void;
+}) {
   return (
     <>
       <div className="page-head">
@@ -217,6 +241,7 @@ export function AboutPage({ boot }: Props) {
           <span className="badge brand">v{boot.version}</span>
           <span className="badge">零内置源</span>
           <span className="badge ok">可逆接管</span>
+          {update?.has_update && <span className="badge danger">NEW</span>}
         </div>
         <p className="hint mt">
           零侵入、订阅驱动、带完整 Web 配置页的飞牛影视扩展。停用或卸载后，
@@ -225,13 +250,9 @@ export function AboutPage({ boot }: Props) {
       </section>
       <section className="card">
         <div className="card-title">检查更新</div>
-        <p className="card-sub">
-          手动查询 GitHub 最新正式版，展示版本、更新说明与发布页下载链接；
-          不会在后台自动下载或安装，升级请在应用中心手动安装 FPK。
-        </p>
         <div className="row">
           <button className="btn sm primary" disabled={checking}
-                  onClick={() => void checkUpdate()}>
+                  onClick={onCheck}>
             {checking ? '检查中…' : '检查更新'}
           </button>
           <span className="small">当前版本 v{boot.version}</span>

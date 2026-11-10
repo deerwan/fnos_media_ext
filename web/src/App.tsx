@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type Bootstrap } from './api';
+import { api, type Bootstrap, type UpdateInfo } from './api';
 import SourcesPage from './Sources';
 import SubscriptionsPage from './Subscriptions';
 import PreferencesPage from './Preferences';
@@ -26,6 +26,23 @@ export default function App() {
   const [boot, setBoot] = useState<Bootstrap | null>(null);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ message: string; kind: string } | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  const checkUpdate = useCallback(async (force = false) => {
+    setCheckingUpdate(true);
+    try {
+      setUpdateInfo(await api.checkUpdate(force));
+    } catch {
+      setUpdateInfo({
+        current: '', latest: '', has_update: false, html_url: '',
+        notes: '', assets: [], published_at: '', error: 'unavailable',
+        cached: false,
+      });
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }, []);
 
   const notify: Notify = useCallback((message, kind = '') => {
     setToast({ message, kind });
@@ -46,6 +63,9 @@ export default function App() {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void checkUpdate(); }, [checkUpdate]);
+
+  const hasUpdate = !!updateInfo?.has_update;
 
   return (
     <div className="layout">
@@ -67,11 +87,12 @@ export default function App() {
             >
               <span className="ico">{item.icon}</span>
               <span>{item.label}</span>
+              {item.key === 'about' && hasUpdate && <span className="nav-dot" />}
             </button>
           ))}
         </nav>
         <div className="sidebar-foot">
-          <div>v{boot?.version || '0.1.1'} · 零内置源</div>
+          <div>v{boot?.version || '0.1.2'} · 零内置源</div>
         </div>
       </aside>
 
@@ -105,7 +126,9 @@ export default function App() {
               <PreferencesPage boot={boot} refresh={refresh} notify={notify} />
             )}
             {page === 'about' && boot && (
-              <AboutPage boot={boot} refresh={refresh} notify={notify} />
+              <AboutPage boot={boot} refresh={refresh} notify={notify}
+                         update={updateInfo} checking={checkingUpdate}
+                         onCheck={() => void checkUpdate(true)} />
             )}
           </>
         )}
@@ -169,7 +192,7 @@ function Overview({ boot, onGo }: { boot: Bootstrap | null; onGo: () => void }) 
       <div className="card">
         <div className="card-title">运行信息</div>
         <div className="pill-row mt">
-          <span className="badge brand">v{boot?.version || '0.1.1'}</span>
+          <span className="badge brand">v{boot?.version || '0.1.2'}</span>
           <span className="badge">运行 {Math.round((boot?.uptime ?? 0) / 60)} 分钟</span>
           <span className="badge ok">上游接管正常</span>
         </div>

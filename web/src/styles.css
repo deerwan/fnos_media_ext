@@ -73,10 +73,15 @@ a { color: var(--brand); }
   color: var(--muted); padding: 14px 12px 6px; opacity: .8;
 }
 .nav-item {
+  position: relative;
   display: flex; align-items: center; gap: 11px; width: 100%;
   padding: 10px 12px; border: 0; border-radius: 10px; background: transparent;
   color: var(--muted); cursor: pointer; text-align: left; font-size: 14px;
   transition: background .16s ease, color .16s ease, transform .16s ease;
+}
+.nav-dot {
+  position: absolute; top: 8px; right: 10px;
+  width: 8px; height: 8px; border-radius: 50%; background: var(--err);
 }
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-item.active {
@@ -298,7 +303,8 @@ input[type=checkbox].check { width: 16px; height: 16px; accent-color: var(--bran
   .brand, .nav-label, .sidebar-foot, .theme-switch { display: none; }
   .nav { flex-direction: row; justify-content: space-around; }
   .nav-item { flex-direction: column; gap: 2px; padding: 6px 2px; font-size: 10px; justify-content: center; }
-  .nav-item span:last-child { white-space: nowrap; }
+  .nav-item span:nth-child(2) { white-space: nowrap; }
+  .nav-dot { top: 5px; right: 5px; width: 7px; height: 7px; }
   .nav-item .ico { font-size: 17px; }
   .main { padding: 20px 16px 100px; }
   .card { padding: 16px; }
