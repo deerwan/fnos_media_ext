@@ -22,6 +22,8 @@ import config
 import douban
 import fake
 import hls
+import playstate
+import playstate_api
 import runtime
 import upstream
 
@@ -66,6 +68,7 @@ async def lifespan(app: FastAPI):
         follow_redirects=True, trust_env=False,
     )
     app.state.store = cms.TitleStore()
+    playstate.load()
     runtime.log(f"service started, sources={len(config.enabled_sources())}")
     worker = asyncio.create_task(_auto_update_worker())
     try:
@@ -73,6 +76,7 @@ async def lifespan(app: FastAPI):
     finally:
         worker.cancel()
         await asyncio.gather(worker, return_exceptions=True)
+        playstate.persist(force=True)
         await app.state.up.aclose()
         await app.state.src.aclose()
         await app.state.poster.aclose()
@@ -91,9 +95,14 @@ async def access_log(request: Request, call_next):
         runtime.log(f"ERROR {request.method} {request.url.path} {type(exc).__name__}")
         raise
     path = request.url.path
+    if path.endswith("/task/running") or "/sys/img/" in path or \
+            path.startswith("/v/api/ext/logs"):
+        return resp
     if "/api/" in path or path.startswith(ONLINE) or path.startswith("/online/") or path.startswith("/_ext/"):
         runtime.log(f"{request.method} {path} -> {resp.status_code} "
                     f"{int((time.monotonic() - started) * 1000)}ms")
+        if path.startswith(ONLINE) and resp.status_code >= 400:
+            runtime.log(f"media error {path} -> {resp.status_code}")
     return resp
 
 
@@ -242,6 +251,7 @@ if STATIC.is_dir():
     app.mount("/v/ext", StaticFiles(directory=str(STATIC)), name="ext")
 
 app.include_router(admin_api.router)
+app.include_router(playstate_api.router)
 
 
 @app.get("/v/api/v1/search/list")
@@ -269,7 +279,9 @@ async def search_list(request: Request):
         runtime.log(f"search error: {type(exc).__name__}")
         titles = []
     briefs = request.app.state.store.remember(titles)
-    cards = fake.normalize_cards([fake.search_card(b) for b in briefs], _ua(request))
+    cards = fake.normalize_cards(
+        [playstate.apply(fake.search_card(b), b["guid"]) for b in briefs],
+        _ua(request))
     data["data"] = cards + items if cfg.get("online_first", True) else items + cards
     return JSONResponse(data, status_code=200,
                         headers={"Content-Type": "application/json; charset=utf-8"})
@@ -296,6 +308,7 @@ async def item_detail(guid: str, request: Request):
                 brief.get("title"), brief.get("year"))
         except Exception as exc:
             runtime.log(f"douban enrich error: {type(exc).__name__}")
+    detail = playstate.apply(detail, guid)
     return JSONResponse(fake.ok(fake.normalize_detail(detail, _ua(request))))
 
 
@@ -367,8 +380,10 @@ async def play_info_route(request: Request):
     brief = store.get(guid) or store.get((store.resolve_episode(guid) or ("",))[0])
     if not brief:
         return await _passthrough(request)
-    return JSONResponse(fake.ok(fake.normalize_detail(
-        fake.play_info(brief, mg, vg, guid), _ua(request))))
+    info = fake.play_info(brief, mg, vg, guid)
+    canonical = (store.resolve_episode(guid) or (guid,))[0]
+    info["ts"] = playstate.ts_for(canonical)
+    return JSONResponse(fake.ok(fake.normalize_detail(info, _ua(request))))
 
 
 @app.post("/v/api/v1/stream")
@@ -461,7 +476,7 @@ async def main_m3u8(mg: str, request: Request):
     attempts = _ordered_lines(brief, line, _bad_lines(guid))
     if config.get().get("auto_best_source", True):
         winner = await _race_lines(request.app.state.src, brief, guid, index,
-                                   line, 1.5)
+                                   line, 3.0)
         if winner:
             attempt, text, base, meta = winner
             hls.remember_playlist_meta((guid, attempt, index), meta)
@@ -474,12 +489,12 @@ async def main_m3u8(mg: str, request: Request):
                                          hls.is_master(text))
     last_error = ""
     tried = set()
-    while True:
+    while len(tried) < 2:
         bad = _bad_lines(guid) | tried
         attempts = [a for a in _ordered_lines(brief, line, bad) if a not in tried]
         if not attempts:
             break
-        for attempt in attempts:
+        for attempt in attempts[:1]:
             tried.add(attempt)
             picked = _pick(brief, attempt, index)
             if not picked:
@@ -494,7 +509,7 @@ async def main_m3u8(mg: str, request: Request):
             try:
                 text, base, meta = await hls.fetch_playlist(
                     request.app.state.src, url,
-                    timeout=float(config.get().get("play_timeout", 8.0)))
+                    timeout=min(float(config.get().get("play_timeout", 8.0)), 2.5))
             except Exception as exc:
                 last_error = type(exc).__name__
                 _mark_bad_line(guid, attempt)
@@ -608,4 +623,19 @@ async def poster(token: str, request: Request):
 @app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE",
                                               "PATCH", "HEAD", "OPTIONS"])
 async def catch_all(full_path: str, request: Request):
+    if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+        try:
+            parsed = json.loads(await request.body() or b"{}")
+            guid = str(parsed.get("guid") or parsed.get("item_guid") or "") \
+                if isinstance(parsed, dict) else ""
+            if not guid:
+                for part in reversed(full_path.split("/")):
+                    if len(part) == 32 and all(ch in "0123456789abcdef" for ch in part):
+                        guid = part
+                        break
+            store = request.app.state.store
+            if guid and (store.get(guid) or store.resolve_episode(guid)):
+                return JSONResponse({"code": 0, "msg": "", "data": {}})
+        except (ValueError, AttributeError):
+            pass
     return await _passthrough_stream(request)

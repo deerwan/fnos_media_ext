@@ -288,7 +288,8 @@ def stream_list(b: dict, mg: str, vg: str, meta: dict | None = None) -> dict:
             "profile": "High", "index": 0, "width": width, "height": height,
             "coded_width": 0, "coded_height": 0, "display_aspect_ratio": "16:9",
             "pix_fmt": "yuv420p", "level": "40", "color_space": "",
-            "color_transfer": "", "color_primaries": "", "duration": 0,
+            "color_transfer": "", "color_primaries": "",
+            "duration": int((meta or {}).get("duration") or 0) if isinstance(meta, dict) else 0,
             "dv_profile": 0, "refs": 1, "r_frame_rate": "25 fps",
             "avg_frame_rate": "25 fps", "bits_per_raw_sample": "8", "bps": bps,
             "progressive": 1, "bit_depth": 8, "wrapper": wrapper,
@@ -335,6 +336,14 @@ def play_info(b: dict, mg: str, vg: str, guid: str) -> dict:
         "media_guid": mg, "item": detail_item(b),
         "direct_link_audio_index": -1,
     }
+
+
+def history_card(b: dict, rec: dict) -> dict:
+    row = search_card(b)
+    row["ts"] = int(rec.get("ts") or 0)
+    row["duration"] = int(rec.get("duration") or 0)
+    row["_updated_at"] = int(rec.get("updated_at") or 0)
+    return row
 
 
 def play_response(mg: str, vg: str, link: str, wrapper: str = "HLS") -> dict:

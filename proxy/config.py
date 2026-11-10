@@ -28,6 +28,7 @@ DEFAULTS = {
     "borrow_official": True,
     "auto_best_source": True,
     "douban_enabled": False,
+    "playstate": {},
     "admin_token": "",
 }
 

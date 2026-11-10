@@ -12,7 +12,8 @@ import httpx
 from fastapi import Request
 from fastapi.responses import Response, StreamingResponse
 
-_UA = "Mozilla/5.0 (compatible; fnos_media_ext/0.1)"
+_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " \
+      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 _URI_ATTR = re.compile(r'URI="([^"]+)"')
 
 
@@ -164,7 +165,10 @@ def rewrite_playlist(text: str, base_url: str, seg_prefix: str,
 async def fetch_playlist(client: httpx.AsyncClient, url: str,
                          timeout: float = 3.0,
                          depth: int = 0) -> tuple[str, str, dict]:
-    resp = await client.get(url, headers={"User-Agent": _UA}, timeout=timeout)
+    parsed = urllib.parse.urlparse(url)
+    headers = {"User-Agent": _UA,
+               "Referer": f"{parsed.scheme}://{parsed.netloc}/"}
+    resp = await client.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
     text = resp.text
     base = str(resp.url)
@@ -191,8 +195,9 @@ async def proxy_media(request: Request, url: str, client: httpx.AsyncClient,
     for key in ("range", "if-range", "if-none-match"):
         if key in request.headers:
             headers[key] = request.headers[key]
-    if "referer" in request.headers:
-        headers["Referer"] = request.headers["referer"]
+    parsed = urllib.parse.urlparse(url)
+    headers["Referer"] = request.headers.get("referer") or \
+        f"{parsed.scheme}://{parsed.netloc}/"
     resp = await client.send(client.build_request("GET", url, headers=headers),
                              stream=True)
     out_headers = {}
