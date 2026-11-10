@@ -13,6 +13,7 @@ import cms
 import config
 import runtime
 import subscription
+import upcheck
 
 router = APIRouter(prefix="/v/api/ext")
 COOKIE = "fnos_media_admin"
@@ -45,9 +46,9 @@ async def body_json(request: Request) -> dict:
 def _version() -> str:
     try:
         version_file = Path(__file__).resolve().parent.parent / "VERSION"
-        return version_file.read_text(encoding="utf-8").strip() or "0.1.0"
+        return version_file.read_text(encoding="utf-8").strip() or "0.1.1"
     except OSError:
-        return "0.1.0"
+        return "0.1.1"
 
 
 def _public_config() -> dict:
@@ -80,6 +81,15 @@ async def fetch_and_apply(url: str | None = None,
     config.save(cfg)
     enabled_count = sum(1 for item in items if item.get("enabled"))
     return {**report, **stats, "enabled": enabled_count, "url": source_url}
+
+
+@router.get("/update/check")
+async def update_check(request: Request):
+    guard(request)
+    result = await upcheck.check(
+        config.get().get("update_repo"), _version(),
+        force=request.query_params.get("force") == "1")
+    return ok(result)
 
 
 @router.get("/bootstrap")

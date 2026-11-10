@@ -47,6 +47,18 @@ export interface Bootstrap {
   sources: Source[];
 }
 
+export interface UpdateInfo {
+  current: string;
+  latest: string;
+  has_update: boolean;
+  html_url: string;
+  notes: string;
+  assets: { name: string; url: string }[];
+  published_at: string;
+  error: string;
+  cached: boolean;
+}
+
 export interface FetchReport {
   total: number;
   added: number;
@@ -133,6 +145,8 @@ export const api = {
     request<FetchReport>('/v/api/ext/subscriptions/content', json('POST', { text })),
   clearCache: () => request<{ cleared: number }>('/v/api/ext/cache', { method: 'DELETE' }),
   logs: () => request<{ logs: { ts: number; msg: string }[] }>('/v/api/ext/logs'),
+  checkUpdate: (force = false) =>
+    request<UpdateInfo>(`/v/api/ext/update/check${force ? '?force=1' : ''}`),
   exportConfig: () => request<{ config: Config }>('/v/api/ext/export'),
   importConfig: (config: Config) =>
     request<{ config: Config }>('/v/api/ext/import', json('POST', { config })),

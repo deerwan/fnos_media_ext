@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, type Bootstrap, type Config } from './api';
+import { api, type Bootstrap, type Config, type UpdateInfo } from './api';
 import type { Notify } from './App';
 
 interface Props {
@@ -187,6 +187,24 @@ export function LogsPage({ notify }: { notify: Notify }) {
 }
 
 export function AboutPage({ boot }: Props) {
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  async function checkUpdate() {
+    setChecking(true);
+    try {
+      setUpdate(await api.checkUpdate(true));
+    } catch {
+      setUpdate({
+        current: boot.version, latest: '', has_update: false, html_url: '',
+        notes: '', assets: [], published_at: '', error: 'unavailable',
+        cached: false,
+      });
+    } finally {
+      setChecking(false);
+    }
+  }
+
   return (
     <>
       <div className="page-head">
@@ -204,6 +222,67 @@ export function AboutPage({ boot }: Props) {
           零侵入、订阅驱动、带完整 Web 配置页的飞牛影视扩展。停用或卸载后，
           官方影视立即原样恢复。
         </p>
+      </section>
+      <section className="card">
+        <div className="card-title">检查更新</div>
+        <p className="card-sub">
+          手动查询 GitHub 最新正式版，展示版本、更新说明与发布页下载链接；
+          不会在后台自动下载或安装，升级请在应用中心手动安装 FPK。
+        </p>
+        <div className="row">
+          <button className="btn sm primary" disabled={checking}
+                  onClick={() => void checkUpdate()}>
+            {checking ? '检查中…' : '检查更新'}
+          </button>
+          <span className="small">当前版本 v{boot.version}</span>
+        </div>
+        {update && (
+          <div className="stack mt">
+            {update.error ? (
+              <span className="small">暂时无法获取更新信息</span>
+            ) : (
+              <>
+                <div className="row">
+                  {update.has_update ? (
+                    <span className="badge warn">发现新版本 v{update.latest}</span>
+                  ) : (
+                    <span className="badge ok">
+                      已是最新版本（v{update.latest || update.current}）
+                    </span>
+                  )}
+                  {update.published_at && (
+                    <span className="small">
+                      发布于 {update.published_at.slice(0, 10)}
+                    </span>
+                  )}
+                  <span className="small">
+                    {update.cached ? '（缓存结果）' : '（刚刚检查）'}
+                  </span>
+                </div>
+                {update.notes && (
+                  <>
+                    <span className="small">更新说明（最新正式版 v{update.latest}）</span>
+                    <div className="log-box">{update.notes}</div>
+                  </>
+                )}
+                {update.html_url && (
+                  <div className="row">
+                    <a className="btn primary sm" href={update.html_url}
+                       target="_blank" rel="noreferrer">
+                      {update.has_update ? '前往下载' : '查看发布页'}
+                    </a>
+                    {update.assets.map((asset) => asset.url && (
+                      <a key={asset.name} className="btn sm" href={asset.url}
+                         target="_blank" rel="noreferrer">
+                        {asset.name}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </section>
       <section className="card">
         <div className="card-title">免责声明</div>

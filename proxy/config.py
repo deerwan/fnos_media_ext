@@ -29,6 +29,7 @@ DEFAULTS = {
     "auto_best_source": True,
     "douban_enabled": False,
     "playstate": {},
+    "update_repo": "deerwan/fnos_media_ext",
     "admin_token": "",
 }
 
